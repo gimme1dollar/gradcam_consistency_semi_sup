@@ -1,0 +1,7 @@
+dataset/DL20/t*
+dataset/DL20/v*
+dataset/Cifar10/
+
+__pycache__/
+checkpoints/
+wandb/

@@ -35,6 +35,7 @@ def path_join(train_path, label, file_list):
         path_list.append(os.path.join(train_path, label, f))
     
     return path_list
+    
 class LoadDataset(Dataset):
     def __init__(self, data_path, transform, mode='valid'):
         super(LoadDataset, self).__init__()
@@ -80,6 +81,7 @@ class LoadDataset(Dataset):
             img = self.transform(img)
 
             return img, label
+
 class LoadSemiDataset(Dataset):
     def __init__(self, data_path, transform, mode='label', ratio=0.05):
         super(LoadSemiDataset, self).__init__()
