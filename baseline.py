@@ -46,16 +46,6 @@ def init(val_batch, val_split, args):
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-
-    transform_unlabel = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
-    ])
     
     train_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=True, download=True, transform=transform_cifar10)
     valid_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=False, download=True, transform=transform_cifar10)
@@ -71,7 +61,7 @@ def init(val_batch, val_split, args):
     if shuffle_dataset :
         np.random.seed(random_seed)
         np.random.shuffle(indices)
-    label_indices, unlabel_indices = indices[split:], indices[:split]
+    label_indices, unlabel_indices = indices[:split], indices[split:]
 
     label_sampler = SubsetRandomSampler(label_indices)
     unlabel_sampler = SubsetRandomSampler(unlabel_indices)

@@ -3,32 +3,37 @@ import torch
 import torch.multiprocessing
 from torchvision import transforms
 from dataset.dataloader import LoadDataset, LoadSemiDataset
+from torch.utils.data.sampler import SubsetRandomSampler
+
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
+
+from torch import nn
+from torchvision import datasets, transforms
+
 from tqdm import tqdm
 from os.path import join as pjn
 import os.path, os, datetime, time, random
 import wandb, argparse
 from utils.losses import *
 from utils.visualize import *
-#from utils.semi_sup import semi_sup_learning
 import math
 import warnings
+
+import numpy as np
+import torch
 import torchvision.transforms.functional as VF
 from typing import Callable
+from tqdm import tqdm
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 warnings.filterwarnings(action='ignore')
 
 torch.backends.cudnn.benchmark = True
 
-imagenet_mean = [0.485, 0.456, 0.406]
-imagenet_std = [0.229, 0.224, 0.225]
-
-data_path = pjn(os.getcwd(), "dataset", "DL20")
-
-import numpy as np
-import torch
-import torch.nn.functional as F
-from tqdm import tqdm
+cifar10_mean = [0.4913, 0.4821, 0.4465]
+cifar10_std = [0.2470, 0.2434, 0.2615]
 
 class ActivationsAndGradients:
     """ Class for extracting activations and
@@ -131,57 +136,42 @@ def cycle(iterable):
         except StopIteration:
             iterator = iter(iterable)
 
-def init(train_batch, val_batch, test_batch, args):
+
+def init(val_batch, val_split, args):
 
     # default augmentation functions : http://incredible.ai/pytorch/2020/04/25/Pytorch-Image-Augmentation/ 
     # for more augmentation functions : https://github.com/aleju/imgaug
 
-    transform_train = transforms.Compose([
-        #transforms.ToPILImage(),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
+    transform_cifar10 = transforms.Compose([transforms.Resize((32, 32)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
+    
+    train_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=True, download=True, transform=transform_cifar10)
+    valid_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=False, download=True, transform=transform_cifar10)
+    
+    split_ratio = val_split
+    shuffle_dataset = True
+    random_seed= 123
 
-    transform_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
-    ])
+    dataset_size = len(train_dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor(split_ratio * dataset_size))
 
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
-    ])
+    if shuffle_dataset :
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+    label_indices, unlabel_indices = indices[:split], indices[split:]
 
-    label_dataset = LoadSemiDataset(data_path = data_path, transform=transform_train , mode='label', ratio=args.ratio)
-    unlabel_dataset = LoadSemiDataset(data_path = data_path, transform=transform_train , mode='unlabel', ratio=args.ratio)
-    val_dataset = LoadDataset(data_path = data_path, transform=transform_val , mode='valid')
-    test_dataset = LoadDataset(data_path = data_path, transform=transform_test , mode='test')
-
-    label_loader = torch.utils.data.DataLoader(
-            dataset=label_dataset, batch_size=train_batch,
-            num_workers=4, shuffle=True, pin_memory=True
-    )
-
-    unlabel_loader = torch.utils.data.DataLoader(
-            dataset=unlabel_dataset, batch_size=4,
-            num_workers=4, shuffle=True, pin_memory=True
-    )
-
-    val_loader = torch.utils.data.DataLoader(
-            dataset=val_dataset, batch_size=val_batch,
-            num_workers=4, shuffle=False, pin_memory=True
-    )
-
-    test_loader = torch.utils.data.DataLoader(
-            dataset=test_dataset, batch_size=test_batch,
-            num_workers=4, shuffle=False, pin_memory=True
-    )
-
-    return label_loader, unlabel_loader, val_loader, test_loader
+    label_sampler = SubsetRandomSampler(label_indices)
+    unlabel_sampler = SubsetRandomSampler(unlabel_indices)
+    
+    label_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=val_batch, sampler=label_sampler)
+    unlabel_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=val_batch, sampler=unlabel_sampler) 
+    valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset, batch_size=val_batch, shuffle=True)
+    
+    return label_loader, unlabel_loader, valid_loader
+    
     
 class TrainManager(object):
     def __init__(
@@ -300,6 +290,15 @@ class TrainManager(object):
         return (correct_1 / total) * 100, (correct_3 / total) * 100, (correct_5 / total) * 100
 
     def train(self):
+        transform_unlabel = transforms.Compose([
+                transforms.ToPILImage(),
+                #transforms.RandomHorizontalFlip(p=0.5),
+                #transforms.RandomVerticalFlip(p=0.5),
+                #transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                #transforms.RandomGrayscale(p=0.2),
+                transforms.ToTensor()
+        ])
+
         start = time.time()
         epoch = 0
         iter_per_epoch = len(self.label_loader)
@@ -316,7 +315,7 @@ class TrainManager(object):
         p_cutoff = 0.80
         for epoch in tqdm(range(self.args.start_epoch, end_epoch), desc='epochs', leave=False):
 
-            if epoch % 5 == 0:
+            if epoch % 1 == 0:
                 top1_acc, top3_acc, top5_acc = self.validate(self.model, self.add_cfg['device'])
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
                 top1_acc_stu = top1_acc
@@ -344,6 +343,11 @@ class TrainManager(object):
                 wandb.log({"training/celoss" : celoss})
 
                 image_ul = next(unlabel_dataloader)
+                images = []
+                for i in image_ul[0]:
+                    #i = transform_unlabel(i)
+                    images.append(i)
+                image_ul = torch.stack(images)
                 image_ul = image_ul.to(self.add_cfg['device']) # DL20
                 image_ul = self.upsampler(image_ul)
                 
@@ -364,9 +368,9 @@ class TrainManager(object):
                 st_image = st_image.cuda()
                 
                 if t_idx % 50 == 0:
-                    #visualize_rescale_image(imagenet_mean, imagenet_std, image_ul, "imagenet_org/imagenet")
-                    visualize_rescale_image(imagenet_mean, imagenet_std, wk_image, "imagenet_wk/imagenet")
-                    visualize_rescale_image(imagenet_mean, imagenet_std, st_image, "imagenet_st/imagenet")
+                    visualize_rescale_image(cifar10_mean, cifar10_std, image_ul, "imagenet_org/imagenet")
+                    visualize_rescale_image(cifar10_mean, cifar10_std, wk_image, "imagenet_wk/imagenet")
+                    visualize_rescale_image(cifar10_mean, cifar10_std, st_image, "imagenet_st/imagenet")
 
                 ## Getting cam
                 wk_cam = []
@@ -376,7 +380,7 @@ class TrainManager(object):
                     wk_cam.append(wk_cam_)
                 wk_cam = torch.stack(wk_cam)
                 if t_idx % 50 == 0:
-                    visualize_cam(wk_image, wk_cam, imagenet_mean, imagenet_std, "wk_cam/imagenet")   
+                    visualize_cam(wk_image, wk_cam, cifar10_mean, cifar10_std, "wk_cam/imagenet")   
          
                 st_cam = []
                 for img in st_image:
@@ -386,12 +390,12 @@ class TrainManager(object):
                     st_cam.append(st_cam_)
                 st_cam = torch.stack(st_cam)
                 if t_idx % 50 == 0:       
-                    visualize_cam(st_image, st_cam, imagenet_mean, imagenet_std, "st_cam/imagenet") 
+                    visualize_cam(st_image, st_cam, cifar10_mean, cifar10_std, "st_cam/imagenet") 
 
                 gt_cam = VF.crop(wk_cam, i, j, h, w)
                 gt_cam = self.resize_256_transform(gt_cam)
                 if t_idx % 50 == 0:       
-                    visualize_cam(st_image, gt_cam, imagenet_mean, imagenet_std, "gt_cam/imagenet")    
+                    visualize_cam(st_image, gt_cam, cifar10_mean, cifar10_std, "gt_cam/imagenet")    
                 del wk_cam
                 
                 ## Get gradcam_consistency_loss
@@ -495,9 +499,10 @@ def main(args):
     additional_cfg['tbx_wrtr_dir'] = os.getcwd() + "/checkpoints/" + str(ti)
 
     wandb.run.name = str(ti)
-    label_loader, unlabel_loader, val_loader, _ = init(
-        args.batch_size_train, args.batch_size_val, args.batch_size_test, args
+    label_loader, unlabel_loader, val_loader = init(
+        args.batch_size_val, args.ratio, args
     )
+
 
     trainer = TrainManager(
         model,
@@ -519,14 +524,13 @@ if __name__ == "__main__":
                         help='Name of the experiment (default: auto)')
     parser.add_argument('--pretrained-ckpt', type=str, default=None,
                         help='Load pretrained weight, write path to weight (default: None)')
-    
-    parser.add_argument('--batch-size-train', type=int, default=4,    
+
+    parser.add_argument('--batch-size-train', type=int, default=16,    
                         help='Batch size for train data (default: 16)')
-    parser.add_argument('--batch-size-val', type=int, default=4,
+    parser.add_argument('--batch-size-val', type=int, default=16,
                         help='Batch size for val data (default: 4)')
-    parser.add_argument('--batch-size-test', type=int, default=1,
-                        help='Batch size for test data (default: 128)')
-    parser.add_argument('--ratio', type=float, default=0.125)
+    parser.add_argument('--ratio', type=float, default=0.02,
+                        help="label:unlabel ratio(0.5, 0.125, 0.05, 0.02)")
 
     parser.add_argument('--save-ckpt', type=int, default=5,
                         help='number of epoch save current weight? (default: 5)')
@@ -542,8 +546,9 @@ if __name__ == "__main__":
                         help='Weight decay for SGD (default: 0.0005)')
     parser.add_argument('--lr-anneal-rate', type=float, default=0.995,
                         help='Annealing rate (default: 0.95)')
+    parser.add_argument('--upscale-factor', type=int, default=8,
+                        help='Upscale factor for bilinear upsampling')
     
 
-    
     args = parser.parse_args()
     main(args)
