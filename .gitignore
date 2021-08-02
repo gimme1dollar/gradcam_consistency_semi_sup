@@ -1,7 +1,15 @@
+# dataset
 dataset/DL20/t*
 dataset/DL20/v*
-dataset/Cifar10/
+dataset/Cifar10/c*
+dataset/Cifar10/b*
+dataset/Cifar10/d*
+dataset/Cifar10/t*
 
-__pycache__/
+# storage
 checkpoints/
 wandb/
+
+# misc
+.DS_Store
+__pycache__/

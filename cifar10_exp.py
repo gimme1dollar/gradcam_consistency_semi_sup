@@ -41,10 +41,8 @@ class ActivationsAndGradients:
         self.gradients = None
         self.activations = None
 
-        # ================ ToDo 1 ================ #
         target_layer.register_forward_hook(self.save_activation)
         target_layer.register_backward_hook(self.save_gradient)
-        # ======================================== #
 
     def save_activation(self, module, input, output):
         self.activations = torch.squeeze(output)
@@ -401,7 +399,7 @@ class TrainManager(object):
             if epoch % 30 == 1:
                 self.save_ckpt(epoch)
 
-            if epoch % 2 == 1:
+            if epoch % 5 == 1:
                 top1_acc, top3_acc, top5_acc = self.validate(self.model, self.add_cfg['device'])
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
                 top1_acc_stu = top1_acc
