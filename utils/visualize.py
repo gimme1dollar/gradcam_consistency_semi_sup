@@ -22,42 +22,34 @@ def un_normalize(img, mean, std):
         t.mul_(s).add_(m)
     return img
 
-def visualize_rescale_image(mean, std, image, tag): # vis image itself with mean train
+def visualize_rescale_image(image, tag): # vis image itself with mean train
     # features : B x C x H x W
-    origin_image = image
-    for batch_idx in range(image.shape[0]):
-        image = origin_image[batch_idx].detach().cpu()
-        X = un_normalize(image, mean, std)
-        X = image.numpy().squeeze()
+    for batch_idx in range(3):
+        img = image[batch_idx].detach().cpu()
+        img = img.numpy().squeeze()
+        img = np.transpose(img, (1,2,0))
 
-        # Normalised [0,255] as integer: don't forget the parenthesis before astype(int)
-        original_image = (255*(X - np.min(X))/np.ptp(X)).astype(np.uint8)
+        wandb.log({str(tag)+"_"+str(batch_idx) : [wandb.Image(img)]})
 
-        #print("original image shape : ", original_image.shape)
-        wandb.log({str(tag)+"_"+str(batch_idx) : [wandb.Image(np.transpose(X, (1,2,0)))]})
-
-def visualize_cam(image, cam, mean, std, tag):
-    cam_origin = cam
+def visualize_cam(image, cam, tag):
     colormap: int = cv2.COLORMAP_JET
     image_origin = image.detach().cpu()
+    cam_origin = cam.detach().cpu()
     
-    for batch_idx in range(image.shape[0]):
-        image = image_origin[batch_idx]
-        X = un_normalize(image, mean, std).numpy()
-        img = (X-np.min(X))/(np.max(X)-np.min(X))
-        img = np.transpose(img, (1,2,0))
+    for batch_idx in range(3):
+        img = image_origin[batch_idx]
+        img = np.transpose(img.numpy(), (1,2,0))
         
-        cam = cam_origin.cpu().detach()
-        cam = cam[batch_idx] # h x w
-        cam = F.interpolate(cam.unsqueeze(0).unsqueeze(0), size=image.size()[1:], mode='bilinear', align_corners=True)
+        cam = cam_origin[batch_idx] # (h, w)
+        
+        cam = F.interpolate(cam.unsqueeze(0).unsqueeze(0), size=image_origin.size()[2:], mode='bilinear', align_corners=True)
         cam = cam.squeeze().unsqueeze(0).numpy()
         cam = (255*(cam - np.min(cam))/np.ptp(cam)).astype(np.uint8)
-        cam = np.transpose(cam, (1,2,0)) # h x w x 1
+        cam = np.transpose(cam, (1,2,0)) # (h, w, 1)
         
         heatmap = cv2.applyColorMap(cam, colormap)
         heatmap = np.float32(heatmap) / 255
-        cam = heatmap * 0.3 + img * 0.7
-        #cam = (cam / np.max(cam)
+        cam = heatmap * 0.9 + img * 0.1
         cam = (255*(cam - np.min(cam))/np.ptp(cam)).astype(np.uint8)
         
         wandb.log({str(tag+"_"+str(batch_idx)) : [wandb.Image(cam)]}, commit=False)
