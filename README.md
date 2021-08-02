@@ -2,19 +2,19 @@
 
 ## Basic information about framework
 - backbone network : efficientnet-b04 
-- augmentation : crop & color jitter
-- consistency : prediction + grad-CAM
+- augmentation : color jitter & crop & rotation
+- consistency : prediction label & grad-CAM 
 
+## Datasets
+- DL20: https://www.kaggle.com/c/postech-classification
+- Cifar10: https://www.cs.toronto.edu/~kriz/cifar.html
 
-## Preparation 
-> python3 main_baseline.py 
+## Demo
+- Difference on GradCAM
+<img src="./img/demo.png" width="800">
 
-- You may follow instructions in https://github.com/kinux98/DLProjectGroup12
-
-
-## Validation & kaggle submission (DL20 Dataset)
-> python3 test.py --pretrained-ckpt="./checkpoints/1_50_FINAL/best.pth" --exp-name="1_50_FINAL"
 
 ## Contributors
 이주용 gimme1dollar       
 권동현 kinux98
+조승혁 shhj1998
