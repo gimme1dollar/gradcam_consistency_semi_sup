@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import wandb
 
 def renormalize_float(vector, range_t : tuple):
-
     row = torch.Tensor(vector)
     r = torch.max(row) - torch.min(row)
     row_0_to_1 = (row - torch.min(row)) / r
@@ -22,14 +21,15 @@ def un_normalize(img, mean, std):
         t.mul_(s).add_(m)
     return img
 
-def visualize_rescale_image(image, tag): # vis image itself with mean train
+def visualize_rescale_image(image, tag):
     # features : B x C x H x W
-    for batch_idx in range(3):
-        img = image[batch_idx].detach().cpu()
-        img = img.numpy().squeeze()
-        img = np.transpose(img, (1,2,0))
+    if image.size()[0] > 1:
+        for batch_idx in range(3):
+            img = image[batch_idx].detach().cpu()
+            img = img.numpy().squeeze()
+            img = np.transpose(img, (1,2,0))
 
-        wandb.log({str(tag)+"_"+str(batch_idx) : [wandb.Image(img)]})
+            wandb.log({str(tag)+"_"+str(batch_idx) : [wandb.Image(img)]})
 
 def visualize_cam(image, cam, tag):
     colormap: int = cv2.COLORMAP_JET
@@ -49,7 +49,7 @@ def visualize_cam(image, cam, tag):
         
         heatmap = cv2.applyColorMap(cam, colormap)
         heatmap = np.float32(heatmap) / 255
-        cam = heatmap * 0.9 + img * 0.1
+        cam = heatmap * 0.4 + img * 0.6
         cam = (255*(cam - np.min(cam))/np.ptp(cam)).astype(np.uint8)
         
         wandb.log({str(tag+"_"+str(batch_idx)) : [wandb.Image(cam)]}, commit=False)

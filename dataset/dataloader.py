@@ -1,12 +1,21 @@
 import os
 import torch
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset
-from torchvision.datasets import ImageFolder
 import glob
+import numpy as np
+from os.path import join as pjn
+
 from PIL import Image
 from typing import Union
-import numpy as np
+
+from torch.utils.data import Dataset
+from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision import datasets
+from torchvision import transforms as T
+from torchvision.datasets import ImageFolder
+
+
+imagenet_mean = [0.485, 0.456, 0.406]
+imagenet_std = [0.229, 0.224, 0.225]
 
 def string_to_sequence(s: str, dtype=np.int32) -> np.ndarray:
     return np.array([ord(c) for c in s], dtype=dtype)
@@ -36,9 +45,9 @@ def path_join(train_path, label, file_list):
     
     return path_list
     
-class LoadDataset(Dataset):
+class DL20_dataset(Dataset):
     def __init__(self, data_path, transform, mode='valid'):
-        super(LoadDataset, self).__init__()
+        super(DL20_dataset, self).__init__()
         self.data_path = data_path
         self.mode = mode
         self.transform = transform
@@ -82,9 +91,9 @@ class LoadDataset(Dataset):
 
             return img, label
 
-class LoadSemiDataset(Dataset):
+class DL20_semi_dataset(Dataset):
     def __init__(self, data_path, transform, mode='label', ratio=0.05):
-        super(LoadSemiDataset, self).__init__()
+        super(DL20_semi_dataset, self).__init__()
         self.data_path = data_path
         self.list_name = str(ratio)+"_"+mode+"_path_list.txt"
         self.mode = mode
@@ -115,3 +124,89 @@ class LoadSemiDataset(Dataset):
             return img, label
         else: 
             raise NotImplementedError()
+
+
+def init(exp_data, train_batch, val_batch, test_batch, args):
+
+    if exp_data == 'dl20':
+        data_path = pjn(os.getcwd(), "dataset", "DL20")
+
+        transform_train = T.Compose([
+            #T.ToPILImage(),
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomVerticalFlip(p=0.5),
+            T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            T.RandomGrayscale(p=0.2),
+            T.ToTensor(),
+            T.Normalize(mean=imagenet_mean, std=imagenet_std)
+            ])
+
+        transform_val = T.Compose([
+            T.ToTensor(),
+            T.Normalize(mean=imagenet_mean, std=imagenet_std)
+        ])
+
+        transform_test = T.Compose([
+            T.ToTensor(),
+            T.Normalize(mean=imagenet_mean, std=imagenet_std)
+        ])
+
+        label_dataset = DL20_semi_dataset(data_path = data_path, transform=transform_train , mode='label', ratio=args.ratio)
+        unlabel_dataset = DL20_semi_dataset(data_path = data_path, transform=transform_val , mode='unlabel', ratio=args.ratio)
+        val_dataset = DL20_dataset(data_path = data_path, transform=transform_val , mode='valid')
+        test_dataset = DL20_dataset(data_path = data_path, transform=transform_test , mode='test')
+
+        label_loader = torch.utils.data.DataLoader(
+                dataset=label_dataset, batch_size=train_batch,
+                num_workers=4, shuffle=True, pin_memory=True
+        )
+
+        unlabel_loader = torch.utils.data.DataLoader(
+                dataset=unlabel_dataset, batch_size=train_batch,
+                num_workers=4, shuffle=True, pin_memory=True
+        )
+
+        val_loader = torch.utils.data.DataLoader(
+                dataset=val_dataset, batch_size=val_batch,
+                num_workers=4, shuffle=False, pin_memory=True
+        )
+
+        test_loader = torch.utils.data.DataLoader(
+                dataset=test_dataset, batch_size=test_batch,
+                num_workers=4, shuffle=False, pin_memory=True
+        )
+
+    if exp_data == 'cifar10':
+        transform_cifar10 = T.Compose([
+            T.ToTensor(),
+            T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        
+        train_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=True, download=True, transform=transform_cifar10)
+        test_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=False, download=True, transform=transform_cifar10)
+
+        split_ratio = args.ratio
+        shuffle_dataset = True
+        random_seed= 123
+
+        dataset_size = len(train_dataset)
+        trainset_size = int( dataset_size * 4 / 5)
+
+        indices = list(range(dataset_size))
+        split = int(np.floor(split_ratio * trainset_size))
+        if shuffle_dataset :
+            np.random.seed(random_seed)
+            np.random.shuffle(indices)
+        label_indices, unlabel_indices, valid_indices = \
+                    indices[:split], indices[split:trainset_size], indices[trainset_size:]
+
+        label_sampler = SubsetRandomSampler(label_indices)
+        unlabel_sampler = SubsetRandomSampler(unlabel_indices)
+        valid_sampler = SubsetRandomSampler(valid_indices)
+        
+        label_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=label_sampler)
+        unlabel_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=unlabel_sampler) 
+        val_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=val_batch, sampler=valid_sampler)
+        test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=test_batch, shuffle=True)
+
+    return label_loader, unlabel_loader, val_loader, test_loader
