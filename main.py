@@ -127,9 +127,9 @@ if __name__ == "__main__":
                         help="label:unlabel ratio(0.5, 0.125, 0.05, 0.02)")
     parser.add_argument('--n_labeled_tasks', type=int, default=500,
                         help="number of labeled images (Default: 500).")
-    parser.add_argument('--alpha', type=float, default=0.5,
+    parser.add_argument('--alpha', type=float, default=1.0,
                         help="prediction const loss coefficient")
-    parser.add_argument('--beta', type=float, default=0.2,
+    parser.add_argument('--beta', type=float, default=1.0,
                         help="gradcam const loss coefficient")
 
     parser.add_argument('--save-ckpt', type=int, default=5,
