@@ -74,13 +74,13 @@ class TrainManager(object):
         self.get_cam = GradCAM(model=self.model, target_layer=target_layer)
 
         if args.exp_data == "dl20":
-            factor = 2
+            factor = 4 #2
         if args.exp_data == "cifar10":
-            factor = 4
+            factor = 8 #4
         self.upsampler = torch.nn.Upsample(scale_factor=factor, mode='bilinear', align_corners=True)
 
         self.resize_transform = T.Compose([
-            T.Resize((128, 128))
+            T.Resize((256, 256))
         ])
 
 
@@ -181,8 +181,9 @@ class TrainManager(object):
         print("  Progress bar for training epochs:")
         end_epoch = self.args.start_epoch + self.args.num_epochs
 
+        best = -float("inf")
         unlabel_dataloader = iter(cycle(self.unlabel_loader))
-        p_cutoff = 0.80
+        p_cutoff = 0.85
         for epoch in tqdm(range(self.args.start_epoch, end_epoch), desc='epochs', leave=False):
             self.model.train()
 
@@ -303,42 +304,33 @@ class TrainManager(object):
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
 
-            if epoch % 30 == 1:
-                self.save_ckpt(epoch)
 
             if epoch % 5 == 1:
                 top1_acc, top3_acc, top5_acc = self.validate(self.model, self.add_cfg['device'])
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
 
-            self.adjust_learning_rate(epoch)
+                if best < top1_acc:
+                    self.save_ckpt()
+
             p_cutoff = min(p_cutoff + (0.1 / self.args.num_epochs), 1.0)
             
         end = time.time()   
         print("Total training time : ", str(datetime.timedelta(seconds=(int(end)-int(start)))))
         print("Finish.")
 
-    def adjust_learning_rate(self, epoch):
-        # update optimizer's learning rate
-        for param_group in self.optimizer.param_groups:
-            prev_lr = param_group['lr']
-            param_group['lr'] = prev_lr * self.args.lr_anneal_rate
+    def save_ckpt(self):
+        nm = f'best_model.pth'
 
-    def save_ckpt(self, epoch):
-        if epoch % self.args.save_ckpt == 0:
+        if not os.path.isdir(pjn('checkpoints', self.tbx_wrtr_dir)):
+            os.mkdir(pjn('checkpoints', self.tbx_wrtr_dir))
 
-            nm = f'epoch_{epoch:04d}.pth'
+        fpath=pjn('checkpoints', self.tbx_wrtr_dir, nm)
 
-            if not os.path.isdir(pjn('checkpoints', self.tbx_wrtr_dir)):
-                os.mkdir(pjn('checkpoints', self.tbx_wrtr_dir))
-
-            fpath=pjn('checkpoints', self.tbx_wrtr_dir, nm)
-
-            d = {
-                'epoch': epoch,
-                'model_state_dict': self.model.state_dict(),
-                'optimizer_state_dict': self.optimizer.state_dict(),
-            }
-            torch.save(d, fpath)
+        d = {
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }
+        torch.save(d, fpath)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.backends.cudnn.benchmark = True
