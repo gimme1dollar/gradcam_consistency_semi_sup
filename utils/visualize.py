@@ -5,8 +5,10 @@ from PIL import Image
 import torch.nn.functional as F
 import wandb
 
-imagenet_mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
-imagenet_std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+imagenet_mean = np.array([0.4914, 0.4822, 0.4465]).reshape(3, 1, 1)
+imagenet_std = np.array([0.2023, 0.1914, 0.2010]).reshape(3, 1, 1)
+# imagenet_mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+# imagenet_std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
 
 def renormalize_float(vector, range_t : tuple):
     row = torch.Tensor(vector)
