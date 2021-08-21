@@ -171,14 +171,13 @@ def init(exp_data, train_batch, val_batch, test_batch, args):
     elif exp_data == 'cifar10':
         transform_cifar10 = T.Compose([
             T.ToTensor(),
-            #T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1914, 0.2010))
         ])
         
         train_dataset = datasets.CIFAR10(root=root_dir / 'Cifar10', train=True, download=True, transform=transform_cifar10)
         test_dataset = datasets.CIFAR10(root=root_dir / 'Cifar10', train=False, download=True, transform=transform_cifar10)
 
         split_ratio = args.ratio
-        # shuffle_dataset = True
         dataset_size = len(train_dataset)
 
         indices = list(range(dataset_size))
