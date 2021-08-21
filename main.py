@@ -1,31 +1,14 @@
 import torch
 import torch.multiprocessing
-import torch.nn.functional as F
-import torchvision.transforms.functional as VF
 from efficientnet_pytorch.model import EfficientNet
+from torchvision import models
 
-from torch import nn
-from torch.utils.data import Dataset
-from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision import transforms as T
-from torchvision import datasets
-from torchvision.datasets import ImageFolder
-from typing import Callable
-
-import math
 import warnings
-import random
-import numpy as np
 import os
-import glob
-import os.path, datetime, time
-import matplotlib.pyplot as plt
+import os.path, datetime
 from os.path import join as pjn
-from PIL import Image
-from typing import Union
 
 import wandb, argparse
-from tqdm import tqdm
 
 from utils.trainer import *
 from utils.losses import *
@@ -49,15 +32,17 @@ def main(args):
     # random.seed(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    wandb.init(project="DL20")
+    wandb.init(project="gradcam-resnet")
     orig_cwd = os.getcwd()
     
+    if args.exp_net == "EfficientNet":
     # bring effi model from this : https://github.com/lukemelas/EfficientNet-PyTorch
-    model = EfficientNet.from_pretrained('efficientnet-b4', num_classes=20).to(device)
+        model = EfficientNet.from_pretrained('efficientnet-b4', num_classes=20).to(device)
+    elif args.exp_net == "ResNet":
+        model = models.resnet50(pretrained=True)
+        model.fc = torch.nn.Linear(2048, 10)
 
-    additional_cfg = {'device': None}
-    additional_cfg['device'] = torch.device('cuda')
-
+    additional_cfg = {'device': torch.device('cuda')}
     trainable_params = [
         {'params': list(filter(lambda p:p.requires_grad, model.parameters())), 'lr':args.lr},
     ]
@@ -101,7 +86,7 @@ def main(args):
         unlabel_loader=unlabel_loader,
         val_loader=val_loader,
         scaler=scaler,
-        num_classes=20
+        num_classes=10
     )
 
     trainer.train()
@@ -112,6 +97,8 @@ if __name__ == "__main__":
                         help='Name of the experiment (default: auto)')
     parser.add_argument('--exp-mode', type=str, default='base',
                         help='Mode of the experiment (base, semi, grad)')
+    parser.add_argument('--exp-net', type=str, default='ResNet',
+                        help="Model network of the experiment (EfficientNet, ResNet)")
     parser.add_argument('--exp-data', type=str, default='dl20',
                         help='Name of the dataset (default: dl20)')
     parser.add_argument('--pretrained-ckpt', type=str, default=None,
