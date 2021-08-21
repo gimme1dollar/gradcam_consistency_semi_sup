@@ -125,6 +125,8 @@ if __name__ == "__main__":
                         help='Batch size for test data (default: 128)')
     parser.add_argument('--ratio', type=float, default=0.02,
                         help="label:unlabel ratio(0.5, 0.125, 0.05, 0.02)")
+    parser.add_argument('--n_labeled_tasks', type=int, default=500,
+                        help="number of labeled images (Default: 500).")
     parser.add_argument('--alpha', type=float, default=0.5,
                         help="prediction const loss coefficient")
     parser.add_argument('--beta', type=float, default=0.2,
@@ -132,6 +134,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--save-ckpt', type=int, default=5,
                         help='number of epoch save current weight? (default: 5)')
+    parser.add_argument('--root-dir', type=str, default='./dataset',
+                        help='root directory to datset folders')
 
     parser.add_argument('--start-epoch', type=int, default=0,
                         help='start epoch (default: 0)')

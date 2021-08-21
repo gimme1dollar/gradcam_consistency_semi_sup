@@ -95,33 +95,33 @@ class TrainManager(object):
             self.save_grad.append(grad)
         return fn
 
-    def color_wk_augmentation(self, i, img):
+    def color_wk_augmentation(self, img):
         color_transform = T.Compose([
-            T.ColorJitter(i, i, i, i)
+            T.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0)
         ])
 
         return color_transform(img)
 
-    def color_st_augmentation(self, i, img):
+    def color_st_augmentation(self, img):
         color_transform = T.Compose([
-            T.ColorJitter(i, i, i, i)
+            T.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0)
         ])
 
         return color_transform(img)
 
     def get_crop_params(self, img):
         w_, h_ = img.size(2), img.size(3)
-        xl = random.randint(0, w_ / 8)
+        xl = random.randint(0, w_ / 4)
         xr = 0
-        while (((xr - xl) < (w_ * 4 / 8)) and (xr <= xl)):
+        while (((xr - xl) < (w_ * 3 / 4)) or (xr <= xl)):
             xr = random.randint(xl, w_)
 
-        yl = random.randint(0, h_ / 8)
+        yl = random.randint(0, h_ / 4)
         yr = 0
-        while (((yr - yl) < (h_ * 4 / 8)) and (yr <= yl)):
+        while (((yr - yl) < (h_ * 3 / 4)) or (yr <= yl)):
             yr = random.randint(yl, h_)
 
-        return xl, yl, xr, yr
+        return xl, yl, xr-xl, yr-yl
 
     def get_rotate_params(self):
         choice = random.choice([0, 90, 180, 360])
@@ -182,7 +182,6 @@ class TrainManager(object):
         end_epoch = self.args.start_epoch + self.args.num_epochs
 
         unlabel_dataloader = iter(cycle(self.unlabel_loader))
-        alpha = 0.965
         p_cutoff = 0.80
         for epoch in tqdm(range(self.args.start_epoch, end_epoch), desc='epochs', leave=False):
             self.model.train()
@@ -219,14 +218,14 @@ class TrainManager(object):
                     image_ul = self.upsampler(image_ul)
                     
                     ## Augmentation
-                    wk_image = self.color_wk_augmentation(0, image_ul)
+                    wk_image = self.color_wk_augmentation(image_ul)
                     wk_image = wk_image.to(device)
                     
                     wk_label = self.model(wk_image)
                     wk_prob, wk_pred = torch.max(wk_label, dim=-1)
                     mask_p = wk_prob.ge(p_cutoff).float()
 
-                    st_image = self.color_st_augmentation(0.5, image_ul)
+                    st_image = self.color_st_augmentation(image_ul)
                     i, j, h, w = self.get_crop_params(st_image)
                     cr_image = VF.crop(st_image, i, j, h, w)
                     cr_image = self.resize_transform(cr_image)
@@ -240,8 +239,8 @@ class TrainManager(object):
                     wk_cam = self.get_cam(wk_image, image.size()[2:])
                     st_cam = self.get_cam(rt_image, image.size()[2:])
                     gt_cam = VF.crop(wk_cam, i, j, h, w)
-                    gt_cam = VF.rotate(gt_cam, r)
                     gt_cam = self.resize_transform(gt_cam)
+                    gt_cam = VF.rotate(gt_cam, r)
 
                     if verbose:
                         print(image.size())
@@ -265,20 +264,33 @@ class TrainManager(object):
                     del wk_cam
                     
                     ## Loss
-                    mask_lbl = torch.stack([ torch.ones_like(st_label[0]) if int(mask_p[i]) else torch.zeros_like(st_label[0]) for i in range(gt_cam.size(0)) ])
-                    mask_cam = torch.stack([ torch.ones_like(gt_cam[0]) if int(mask_p[i]) else torch.zeros_like(gt_cam[0]) for i in range(gt_cam.size(0)) ])                
-                    self.optimizer.zero_grad()
-                    with torch.cuda.amp.autocast():
-                        label_loss = CEloss((st_label*mask_lbl), (wk_pred*mask_p).long())
-                        label_loss *= self.args.alpha
-                        losses_list.append(label_loss)   
-                        wandb.log({"training/lbl_loss" : label_loss})
-                        
-                        cam_loss = MSEloss(st_cam * mask_cam, gt_cam * mask_cam)
-                        cam_loss *= self.args.beta
-                        if math.isnan(cam_loss) is False:
-                            losses_list.append(cam_loss)
-                        wandb.log({"training/cam_loss" : cam_loss})
+                    wk_pred_, st_label_, st_cam_, gt_cam_ = [], [], [], []
+                    for idx, mask in enumerate(mask_p):
+                        if mask == 1:
+                            wk_pred_.append(wk_pred[idx])
+                            st_label_.append(st_label[idx])
+                            st_cam_.append(st_cam[idx])
+                            gt_cam_.append(gt_cam[idx])
+
+                    if len(wk_pred_) > 0:
+                        wk_pred_ = torch.stack(wk_pred_)
+                        st_label_ = torch.stack(st_label_)
+                        st_cam_ = torch.stack(st_cam_)
+                        gt_cam_ = torch.stack(gt_cam_)
+                                
+                        self.optimizer.zero_grad()
+                        with torch.cuda.amp.autocast():
+                            label_loss = CEloss((st_label_), (wk_pred_).long())
+                            label_loss *= self.args.alpha
+                            losses_list.append(label_loss)   
+                            wandb.log({"training/lbl_loss" : label_loss})
+                            
+                            cam_loss = MSEloss(st_cam_, gt_cam_)
+                            cam_loss *= self.args.beta
+                            if not math.isnan(cam_loss): 
+                                losses_list.append(cam_loss)
+                            wandb.log({"training/cam_loss" : cam_loss})
+                            
                     del st_cam, gt_cam
 
                 ## Train model
@@ -297,9 +309,9 @@ class TrainManager(object):
             if epoch % 5 == 1:
                 top1_acc, top3_acc, top5_acc = self.validate(self.model, self.add_cfg['device'])
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
-                top1_acc_stu = top1_acc
 
             self.adjust_learning_rate(epoch)
+            p_cutoff = min(p_cutoff + (0.1 / self.args.num_epochs), 1.0)
             
         end = time.time()   
         print("Total training time : ", str(datetime.timedelta(seconds=(int(end)-int(start)))))
@@ -328,6 +340,6 @@ class TrainManager(object):
             }
             torch.save(d, fpath)
 
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.backends.cudnn.benchmark = True
+
