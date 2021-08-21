@@ -66,19 +66,24 @@ class TrainManager(object):
         self.val_loader = val_loader
         self.num_classes = num_classes
 
-        for idx, module in model._modules.items():
-            for name, block in enumerate(getattr(model, "_blocks")):
-                if str(name) == '30': # may change the target layer
-                    target_layer = block
-
+        # Network target layer
+        if args.exp_net == "EfficientNet":
+            for idx, module in model._modules.items():
+                for name, block in enumerate(getattr(model, "_blocks")):
+                    if str(name) == '30': # '10':
+                        target_layer = block
+        elif args.exp_net == "ResNet":
+            target_layer = self.model.layer1[-1]
+        
         self.get_cam = GradCAM(model=self.model, target_layer=target_layer)
 
+        # Image size
         if args.exp_data == "dl20":
             factor = 4 #2
-        if args.exp_data == "cifar10":
+        elif args.exp_data == "cifar10":
             factor = 8 #4
         self.upsampler = torch.nn.Upsample(scale_factor=factor, mode='bilinear', align_corners=True)
-
+        
         self.resize_transform = T.Compose([
             T.Resize((256, 256))
         ])
@@ -172,7 +177,7 @@ class TrainManager(object):
         print("  -------------------------- ")
         print("  batch size for training: ", self.args.batch_size_train)
         print("  batch size for validation: ", self.args.batch_size_val)
-        print("  batch siez for testing: ", self.args.batch_size_test)
+        print("  batch size for testing: ", self.args.batch_size_test)
         print("  -------------------------- ")
         print("  iteration per epoch(considered batch size): ", iter_per_epoch)
         print("  label iter : ", len(self.label_loader))
