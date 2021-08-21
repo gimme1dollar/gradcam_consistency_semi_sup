@@ -2,12 +2,13 @@ import os
 import torch
 import glob
 import numpy as np
+from pathlib import Path
 from os.path import join as pjn
 
 from PIL import Image
 from typing import Union
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets
 from torchvision import transforms as T
@@ -127,19 +128,13 @@ class DL20_semi_dataset(Dataset):
 
 
 def init(exp_data, train_batch, val_batch, test_batch, args):
-
+    root_dir = Path(args.root_dir)
     if exp_data == 'dl20':
-        data_path = pjn(os.getcwd(), "dataset", "DL20")
-
+        data_path = root_dir / "DL20"
         transform_train = T.Compose([
-            #T.ToPILImage(),
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomVerticalFlip(p=0.5),
-            T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-            T.RandomGrayscale(p=0.2),
             T.ToTensor(),
             T.Normalize(mean=imagenet_mean, std=imagenet_std)
-            ])
+        ])
 
         transform_val = T.Compose([
             T.ToTensor(),
@@ -156,57 +151,55 @@ def init(exp_data, train_batch, val_batch, test_batch, args):
         val_dataset = DL20_dataset(data_path = data_path, transform=transform_val , mode='valid')
         test_dataset = DL20_dataset(data_path = data_path, transform=transform_test , mode='test')
 
-        label_loader = torch.utils.data.DataLoader(
-                dataset=label_dataset, batch_size=train_batch,
-                num_workers=4, shuffle=True, pin_memory=True
+        label_loader = DataLoader(
+            dataset=label_dataset, batch_size=train_batch,
+            shuffle=True, pin_memory=True
+        )
+        unlabel_loader = DataLoader(
+            dataset=unlabel_dataset, batch_size=train_batch,
+            shuffle=True, pin_memory=True
+        )
+        val_loader = DataLoader(
+            dataset=val_dataset, batch_size=val_batch,
+            shuffle=False, pin_memory=True
+        )
+        test_loader = DataLoader(
+            dataset=test_dataset, batch_size=test_batch,
+            shuffle=False, pin_memory=True
         )
 
-        unlabel_loader = torch.utils.data.DataLoader(
-                dataset=unlabel_dataset, batch_size=train_batch,
-                num_workers=4, shuffle=True, pin_memory=True
-        )
-
-        val_loader = torch.utils.data.DataLoader(
-                dataset=val_dataset, batch_size=val_batch,
-                num_workers=4, shuffle=False, pin_memory=True
-        )
-
-        test_loader = torch.utils.data.DataLoader(
-                dataset=test_dataset, batch_size=test_batch,
-                num_workers=4, shuffle=False, pin_memory=True
-        )
-
-    if exp_data == 'cifar10':
+    elif exp_data == 'cifar10':
         transform_cifar10 = T.Compose([
             T.ToTensor(),
-            T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            #T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         
-        train_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=True, download=True, transform=transform_cifar10)
-        test_dataset = datasets.CIFAR10(root='./dataset/Cifar10', train=False, download=True, transform=transform_cifar10)
+        train_dataset = datasets.CIFAR10(root=root_dir / 'Cifar10', train=True, download=True, transform=transform_cifar10)
+        test_dataset = datasets.CIFAR10(root=root_dir / 'Cifar10', train=False, download=True, transform=transform_cifar10)
 
         split_ratio = args.ratio
-        shuffle_dataset = True
-        random_seed= 123
-
+        # shuffle_dataset = True
         dataset_size = len(train_dataset)
-        trainset_size = int( dataset_size * 4 / 5)
 
         indices = list(range(dataset_size))
-        split = int(np.floor(split_ratio * trainset_size))
-        if shuffle_dataset :
-            np.random.seed(random_seed)
-            np.random.shuffle(indices)
+        n_labeled_tasks = args.n_labeled_tasks
+        n_unlabeled_tasks = int(n_labeled_tasks * split_ratio)
+        trainset_size = n_labeled_tasks + n_unlabeled_tasks
+        np.random.shuffle(indices)
         label_indices, unlabel_indices, valid_indices = \
-                    indices[:split], indices[split:trainset_size], indices[trainset_size:]
+                    indices[:n_labeled_tasks], indices[n_labeled_tasks:trainset_size], indices[trainset_size:]
 
         label_sampler = SubsetRandomSampler(label_indices)
         unlabel_sampler = SubsetRandomSampler(unlabel_indices)
         valid_sampler = SubsetRandomSampler(valid_indices)
         
-        label_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=label_sampler)
-        unlabel_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=unlabel_sampler) 
-        val_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=val_batch, sampler=valid_sampler)
-        test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=test_batch, shuffle=True)
+        label_loader = DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=label_sampler)
+        unlabel_loader = DataLoader(dataset=train_dataset, batch_size=train_batch, sampler=unlabel_sampler) 
+        val_loader = DataLoader(dataset=train_dataset, batch_size=val_batch, sampler=valid_sampler)
+        test_loader = DataLoader(dataset=test_dataset, batch_size=test_batch, shuffle=True)
+
+    else:
+        raise Exception
 
     return label_loader, unlabel_loader, val_loader, test_loader
+
