@@ -184,7 +184,10 @@ class TrainManager(object):
     def train(self, verbose=False):
         start = time.time()
         iter_per_epoch = len(self.label_loader)   
+        print("  experiment name: ", self.args.exp_mode)
         print("  experiment mode: ", self.args.exp_mode)
+        print("  experiment network: ", self.args.exp_net)
+        print("  experiment layer: ", self.args.exp_layer)
         print("  experiment dataset: ", self.args.exp_data)
         print("  experiment ratio: ", self.args.ratio)
         print("  -------------------------- ")
@@ -323,12 +326,13 @@ class TrainManager(object):
                 self.scaler.update()
 
 
-            if epoch % 5 == 1:
+            if epoch % 3 == 1:
                 top1_acc, top3_acc, top5_acc = self.validate(self.model, self.add_cfg['device'])
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
 
                 if best < top1_acc:
                     self.save_ckpt()
+                    wandb.log({"validation/best_top1" : best})
 
             p_cutoff = min(p_cutoff + (0.1 / self.args.num_epochs), 1.0)
             
