@@ -70,10 +70,23 @@ class TrainManager(object):
         if args.exp_net == "EfficientNet":
             for idx, module in model._modules.items():
                 for name, block in enumerate(getattr(model, "_blocks")):
-                    if str(name) == '30': # '10':
+                    if str(name) == '5' and self.args.exp_layer == 1:
+                        target_layer = block
+                    elif str(name) == '10' and self.args.exp_layer == 2:
+                        target_layer = block
+                    elif str(name) == '20' and self.args.exp_layer == 3:
+                        target_layer = block
+                    elif str(name) == '30' and self.args.exp_layer == 4:
                         target_layer = block
         elif args.exp_net == "ResNet":
-            target_layer = self.model.layer1[-1]
+            if self.args.exp_layer == 1:
+                target_layer = self.model.layer1[-1]
+            elif self.args.exp_layer == 2:
+                target_layer = self.model.layer2[-1]
+            elif self.args.exp_layer == 3:
+                target_layer = self.model.layer3[-1]
+            elif self.args.exp_layer == 4:
+                target_layer = self.model.layer4[-1]
         
         self.get_cam = GradCAM(model=self.model, target_layer=target_layer)
 

@@ -99,6 +99,8 @@ if __name__ == "__main__":
                         help='Mode of the experiment (base, semi, grad)')
     parser.add_argument('--exp-net', type=str, default='ResNet',
                         help="Model network of the experiment (EfficientNet, ResNet)")
+    parser.add_argument('--exp-layer', type=int, default=4,
+                        help="Model network of the experiment (1, 2, 3, 4)")
     parser.add_argument('--exp-data', type=str, default='dl20',
                         help='Name of the dataset (default: dl20)')
     parser.add_argument('--pretrained-ckpt', type=str, default=None,
@@ -112,7 +114,7 @@ if __name__ == "__main__":
                         help='Batch size for test data (default: 128)')
     parser.add_argument('--ratio', type=float, default=0.02,
                         help="label:unlabel ratio(0.5, 0.125, 0.05, 0.02)")
-    parser.add_argument('--n_labeled_tasks', type=int, default=500,
+    parser.add_argument('--n-labeled-tasks', type=int, default=500,
                         help="number of labeled images (Default: 500).")
     parser.add_argument('--alpha', type=float, default=1.0,
                         help="prediction const loss coefficient")
