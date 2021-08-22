@@ -230,7 +230,7 @@ class TrainManager(object):
                     visualize_rescale_image(image, "image_sup/image")
 
                 ### Unlabeled dataset
-                if self.args.exp_mode == "grad":
+                if self.args.exp_mode == "abla":
                     image_ul = next(unlabel_dataloader)
                     images = []
                     for i in image_ul[0]:
@@ -239,6 +239,57 @@ class TrainManager(object):
                     image_ul = image_ul.to(device)
                     image_ul = self.upsampler(image_ul)
                     
+                    ## Augmentation
+                    wk_image = self.color_wk_augmentation(image_ul)
+                    wk_image = wk_image.to(device)
+                    
+                    wk_label = self.model(wk_image)
+                    wk_prob, wk_pred = torch.max(wk_label, dim=-1)
+                    mask_p = wk_prob.ge(p_cutoff).float()
+
+                    st_image = self.color_st_augmentation(image_ul)
+                    i, j, h, w = self.get_crop_params(st_image)
+                    cr_image = VF.crop(st_image, i, j, h, w)
+                    cr_image = self.resize_transform(cr_image)
+                    r = self.get_rotate_params()
+                    rt_image = VF.rotate(cr_image, r)
+                    rt_image = rt_image.to(device)
+                    st_label = self.model(rt_image)
+                    
+                    if t_idx % 10 == 0:
+                        visualize_rescale_image(image_ul, "image_org/image")
+                        #visualize_rescale_image(wk_image, "image_wk_aug/image")
+                        #visualize_rescale_image(st_image, "image_st_aug/image")
+                        #visualize_rescale_image(cr_image, "image_cr_aug/image")
+                        visualize_rescale_image(rt_image, "image_rt_aug/image")
+                        
+                    ## Loss
+                    wk_pred_, st_label_ = [], []
+                    for idx, mask in enumerate(mask_p):
+                        if mask == 1:
+                            wk_pred_.append(wk_pred[idx])
+                            st_label_.append(st_label[idx])
+
+                    if len(wk_pred_) > 0:
+                        wk_pred_ = torch.stack(wk_pred_)
+                        st_label_ = torch.stack(st_label_)
+                                
+                        self.optimizer.zero_grad()
+                        with torch.cuda.amp.autocast():
+                            label_loss = CEloss((st_label_), (wk_pred_).long())
+                            label_loss *= self.args.alpha
+                            losses_list.append(label_loss)   
+                            wandb.log({"training/lbl_loss" : label_loss})
+                     
+                elif self.args.exp_mode == "grad":
+                    image_ul = next(unlabel_dataloader)
+                    images = []
+                    for i in image_ul[0]:
+                        images.append(i)
+                    image_ul = torch.stack(images)
+                    image_ul = image_ul.to(device)
+                    image_ul = self.upsampler(image_ul)
+                           
                     ## Augmentation
                     wk_image = self.color_wk_augmentation(image_ul)
                     wk_image = wk_image.to(device)
@@ -275,9 +326,6 @@ class TrainManager(object):
                     
                     if t_idx % 10 == 0:
                         visualize_rescale_image(image_ul, "image_org/image")
-                        #visualize_rescale_image(wk_image, "image_wk_aug/image")
-                        #visualize_rescale_image(st_image, "image_st_aug/image")
-                        #visualize_rescale_image(cr_image, "image_cr_aug/image")
                         visualize_rescale_image(rt_image, "image_rt_aug/image")
 
                         visualize_cam(wk_image, wk_cam, "wk_cam/cam")  
@@ -331,8 +379,8 @@ class TrainManager(object):
                 wandb.log({"validation/top1_acc" : top1_acc, "validation/top3_acc" : top3_acc, "validation/top5_acc" : top5_acc})
 
                 if best < top1_acc:
-                    self.save_ckpt()
                     best = top1_acc
+                    self.save_ckpt()
             wandb.log({"validation/best_top1" : best})
             p_cutoff = min(p_cutoff + (0.1 / self.args.num_epochs), 1.0)
             

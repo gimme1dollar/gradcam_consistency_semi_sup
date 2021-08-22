@@ -96,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument('--exp-name', type=str, default='auto',
                         help='Name of the experiment (default: auto)')
     parser.add_argument('--exp-mode', type=str, default='base',
-                        help='Mode of the experiment (base, semi, grad)')
+                        help='Mode of the experiment (base, abla, grad)')
     parser.add_argument('--exp-net', type=str, default='ResNet',
                         help="Model network of the experiment (EfficientNet, ResNet)")
     parser.add_argument('--exp-layer', type=int, default=4,
