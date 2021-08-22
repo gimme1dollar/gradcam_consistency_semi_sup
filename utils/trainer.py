@@ -332,6 +332,7 @@ class TrainManager(object):
 
                 if best < top1_acc:
                     self.save_ckpt()
+                    best = top1_acc
             wandb.log({"validation/best_top1" : best})
             p_cutoff = min(p_cutoff + (0.1 / self.args.num_epochs), 1.0)
             
