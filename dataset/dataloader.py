@@ -170,6 +170,11 @@ def init(exp_data, train_batch, val_batch, test_batch, args):
 
     elif exp_data == 'cifar10':
         transform_cifar10 = T.Compose([
+            #T.ToPILImage(),
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomVerticalFlip(p=0.5),
+            #T.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            #T.RandomGrayscale(p=0.2),
             T.ToTensor(),
             T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1914, 0.2010))
         ])
