@@ -19,24 +19,26 @@ pip install -r requirements.txt
 ```
 
 ## Basic information about framework
-- backbone network : ResNet50
-- augmentation : crop & rotation (& color jitter)
-- consistency : Grad-CAM (+ prediction label)
+- backbone network : ResNet50     
+- augmentation : crop & rotation (& color jitter)     
+- consistency : Grad-CAM (+ prediction label)     
 
 ## Datasets
-- DL20: https://www.kaggle.com/c/postech-classification
-- Cifar10: https://www.cs.toronto.edu/~kriz/cifar.html
+- DL20: https://www.kaggle.com/c/postech-classification     
+- Cifar10: https://www.cs.toronto.edu/~kriz/cifar.html     
 
 ## Demo
-- Overview
-<img src="./img/overview.png" width="800">
-
-- Difference on GradCAM
-<img src="./img/training.png" width="800">
-
-- Validation test statistics
-<img src="./img/result.PNG" width="800">
-
+- Overview     
+<img src="./img/overview.png" width="800">     
+     
+- Difference on GradCAM     
+<img src="./img/training.png" width="800">     
+     
+- Validation test statistics     
+<img src="./img/result.PNG" width="800">     
+     
+## Related work
+paper: Semi-supervised Image Classification with Grad-CAM Consistency (https://arxiv.org/abs/2108.13673)
 
 
 ## Contributors
